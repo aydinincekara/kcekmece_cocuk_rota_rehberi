@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Küçükçekmece Çocuk Rota Rehberi</title>
+    
+    <!-- Leaflet.js CSS (Harita Görselliği İçin) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        /* Genel Tasarım Ayarları */
+        :root {
+            --primary: #2c3e50;
+            --secondary: #e74c3c;
+            --accent: #3498db;
+            --bg-color: #f8f9fa;
+        }
+
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background-color: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* Üst Menü / Başlık Alanı */
+        header { 
+            background: var(--primary); 
+            color: white; 
+            padding: 15px 20px; 
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            z-index: 1000;
+        }
+        
+        header h1 { margin: 0; font-size: 22px; display: flex; align-items: center; gap: 10px; }
+        header p { margin: 5px 0 0 0; font-size: 13px; color: #bdc3c7; }
+
+        /* Ana İçerik Düzeni (Yan Menü + Harita) */
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Sol Taraf: Liste ve Filtreleme Alanı */
+        .sidebar {
+            width: 300px;
+            background: white;
+            border-right: 1px solid #ddd;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            transition: 0.3s;
+        }
+
+        .filter-section {
+            padding: 15px;
+            background: #f1f2f6;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .filter-btn {
+            background: white;
+            border: 1px solid #ccc;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            transition: all 0.2s;
+        }
+        
+        .filter-btn.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        /* Liste Elemanları */
+        .location-list {
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+
+        .location-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .location-item:hover { background: #f9f9f9; border-left: 4px solid var(--secondary); padding-left: 11px; }
+        .location-item h3 { margin: 0 0 5px 0; font-size: 16px; color: var(--primary); }
+        .location-item p { margin: 0; font-size: 13px; color: #666; line-height: 1.4; }
+        .location-category { font-size: 11px; font-weight: bold; text-transform: uppercase; color: var(--accent); margin-bottom: 4px; display: inline-block;}
+
+        /* Sağ Taraf: Harita Alanı */
+        #map { 
+            flex: 1; 
+            height: 100%;
+        }
+        
+        /* Harita İçi Popup Stilleri */
+        .custom-popup .leaflet-popup-content-wrapper { border-radius: 8px; }
+        .custom-popup .leaflet-popup-content { margin: 15px; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        .popup-title { color: var(--secondary); font-size: 16px; font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid #eee; padding-bottom: 5px;}
+        .popup-desc { font-size: 13px; color: #444; margin-bottom: 10px; }
+        .popup-img { width: 100%; border-radius: 4px; margin-bottom: 10px; height: 120px; object-fit: cover; background: #eee; }
+
+        /* Mobil Uyumluluk */
+        @media (max-width: 768px) {
+            .container { flex-direction: column; }
+            .sidebar { width: 100%; height: 35vh; border-right: none; border-bottom: 2px solid #ddd; }
+            #map { height: 65vh; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h1>🗺️ Küçükçekmece Rota Rehberi</h1>
+            <p>Çocuklar için Eğitim, Sanat ve Eğlence Durakları</p>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Yan Menü (Filtreler ve Liste) -->
+        <div class="sidebar">
+            <div class="filter-section">
+                <button class="filter-btn active" onclick="filterData('Tümü')">Tümü</button>
+                <button class="filter-btn" onclick="filterData('Eğitim')">Eğitim & Atölye</button>
+                <button class="filter-btn" onclick="filterData('Etkinlik')">Kültür & Sanat</button>
+                <button class="filter-btn" onclick="filterData('Park')">Park & Doğa</button>
+            </div>
+            <ul class="location-list" id="listContainer">
+                <!-- Javascript ile doldurulacak -->
+            </ul>
+        </div>
+
+        <!-- Harita -->
+        <div id="map"></div>
+    </div>
+
+    <!-- Leaflet.js Kütüphanesi -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // 1. Haritayı Başlat
+        var map = L.map('map').setView([41.0300, 28.7800], 13);
+        
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // 2. Özel İkon Tanımlamaları (Renkleri kategoriye göre değişir)
+        var createIcon = function(color) {
+            return L.icon({
+                iconUrl: `https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-${color}.png`,
+                shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+                iconSize: [25, 41],
+                iconAnchor: [12, 41],
+                popupAnchor: [1, -34],
+                shadowSize: [41, 41]
+            });
+        };
+
+        const icons = {
+            'Eğitim': createIcon('blue'),
+            'Etkinlik': createIcon('red'),
+            'Park': createIcon('green')
+        };
+
+        // 3. Veri Seti (Öğrenciler buraya yeni yerler ekleyebilir)
+        const locationsData = [
+            { 
+                id: 1,
+                name: "Çocuk Üniversitesi", 
+                lat: 41.0258, 
+                lng: 28.7905, 
+                category: "Eğitim",
+                desc: "Robotik, kodlama, FLL/FTC takımları ve 3D tasarım laboratuvarları.",
+                image: "https://via.placeholder.com/300x150/3498db/ffffff?text=Cocuk+Universitesi"
+            },
+            { 
+                id: 2,
+                name: "Atakent Kültür Merkezi", 
+                lat: 41.0416, 
+                lng: 28.7832, 
+                category: "Etkinlik",
+                desc: "21 Aralık etkinlikleri, tiyatro ve yıl sonu kültürel gösterimler.",
+                image: "https://via.placeholder.com/300x150/e74c3c/ffffff?text=Kultur+Merkezi"
+            },
+            { 
+                id: 3,
+                name: "Gençlik Merkezi", 
+                lat: 41.0185, 
+                lng: 28.7811, 
+                category: "Eğitim",
+                desc: "Dijital Gelecek Şenliği, karma gerçeklik, EEG deneyimleri ve Maker atölyeleri.",
+                image: "https://via.placeholder.com/300x150/3498db/ffffff?text=Genclik+Merkezi"
+            },
+            { 
+                id: 4,
+                name: "Bilgi Evi", 
+                lat: 41.0310, 
+                lng: 28.7750, 
+                category: "Eğitim",
+                desc: "İlkokul seviyesi için Matatalab, unplugged algoritmalar ve STEAM sınıfları.",
+                image: "https://via.placeholder.com/300x150/3498db/ffffff?text=Bilgi+Evi"
+            },
+            { 
+                id: 5,
+                name: "Atatürk Kent Ormanı", 
+                lat: 41.0500, 
+                lng: 28.7950, 
+                category: "Park",
+                desc: "Doğa ve tarihi alanlar gezi programı için yürüyüş parkurları.",
+                image: "https://via.placeholder.com/300x150/2ecc71/ffffff?text=Kent+Ormani"
+            }
+        ];
+
+        // 4. Haritadaki İşaretçileri (Pinleri) Tutan Dizi
+        let currentMarkers = [];
+
+        // 5. Sistemi Render Eden (Çizen) Ana Fonksiyon
+        function renderSystem(dataList) {
+            // Önceki pinleri haritadan temizle
+            currentMarkers.forEach(marker => map.removeLayer(marker));
+            currentMarkers = [];
+            
+            const listContainer = document.getElementById('listContainer');
+            listContainer.innerHTML = ''; // Listeyi temizle
+
+            dataList.forEach(loc => {
+                // Harita Pini Oluştur
+                let marker = L.marker([loc.lat, loc.lng], { icon: icons[loc.category] }).addTo(map);
+                
+                // Popup İçeriği Hazırla
+                let popupContent = `
+                    <div class="popup-title">${loc.name}</div>
+                    <img src="${loc.image}" class="popup-img" alt="${loc.name}">
+                    <div class="popup-desc">${loc.desc}</div>
+                `;
+                marker.bindPopup(popupContent, { className: 'custom-popup' });
+                currentMarkers.push(marker);
+
+                // Sol Menüdeki Liste Elemanını Oluştur
+                let li = document.createElement('li');
+                li.className = 'location-item';
+                li.innerHTML = `
+                    <span class="location-category" style="color: ${loc.category === 'Eğitim' ? '#3498db' : loc.category === 'Park' ? '#2ecc71' : '#e74c3c'}">${loc.category}</span>
+                    <h3>${loc.name}</h3>
+                    <p>${loc.desc.substring(0, 50)}...</p>
+                `;
+                
+                // Listeye tıklanınca haritada o noktaya git ve popup aç
+                li.onclick = () => {
+                    map.flyTo([loc.lat, loc.lng], 16, { duration: 1.5 });
+                    marker.openPopup();
+                };
+                
+                listContainer.appendChild(li);
+            });
+        }
+
+        // 6. Filtreleme Fonksiyonu
+        function filterData(category) {
+            // Butonların aktiflik durumunu güncelle
+            document.querySelectorAll('.filter-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Veriyi filtrele ve tekrar çiz
+            if (category === 'Tümü') {
+                renderSystem(locationsData);
+                map.setView([41.0300, 28.7800], 13); // Görünümü sıfırla
+            } else {
+                const filtered = locationsData.filter(item => item.category === category);
+                renderSystem(filtered);
+            }
+        }
+
+        // 7. Sayfa yüklendiğinde sistemi başlat
+        window.onload = () => {
+            renderSystem(locationsData);
+        };
+    </script>
+</body>
+</html>
